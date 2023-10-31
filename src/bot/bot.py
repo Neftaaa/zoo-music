@@ -1,14 +1,14 @@
-import json
 import discord
 from discord import app_commands
 from colorama import Fore
-from pytube import YouTube
+import json
 import os
 import validators
 from youtube_search import YoutubeSearch
 
 from src.functions.init import *
 from src.functions.senders import *
+from src.functions.downloaders import *
 
 
 def run_discord_bot():
@@ -31,19 +31,9 @@ def run_discord_bot():
     tree = app_commands.CommandTree(bot)
     token = get_bot_token()
 
-    def get_video_url(prompt: str) -> str:
+    def yt_search(prompt: str) -> str:
         result = json.loads(YoutubeSearch(prompt, max_results=1).to_json())
         return f"https://youtube.com/watch?v={result['videos'][0]['id']}"
-
-    def download_video_audio(url: str):
-        video = YouTube(url)
-        audio = video.streams.filter(only_audio=True).first()
-        outfile = audio.download(output_path="Temp/")
-
-        if "audio.mp3" in listdir("Temp/"):
-            os.remove("Temp/audio.mp3")
-
-        os.rename(outfile, "Temp/audio.mp3")
 
     @tree.command(name="play", description="Joue la piste audio d'une vidéo YouTube.")
     async def play(interaction: discord.Interaction, search: str):
@@ -51,7 +41,24 @@ def run_discord_bot():
 
         bot_voice_channels = interaction.client.voice_clients
 
+        if validators.url(search):
+            media = detect_media(search)
+            if media is None:
+                await send_deferred_bot_response(interaction, f"Lien non-supporté. Les différents médias disponibles sont : `{str(get_supported_medias().keys())}`")
+                return
+
+            video_url = search
+            download_audio(video_url, media)
+
+        else:
+            video_url = yt_search(search)
+
         if not bot_voice_channels:
+
+            if interaction.user.voice is None:
+                await send_deferred_bot_response(interaction, "Impossible de jouer la musique si vous n'êtes pas connecté(e) à un salons vocal.")
+                return
+
             channel_to_join = interaction.user.voice.channel
             voice_client = await channel_to_join.connect()
 
@@ -60,16 +67,16 @@ def run_discord_bot():
             if voice_client.is_playing():
                 voice_client.stop()
 
-        if validators.url(search):
-            video_url = search
-
-        else:
-            video_url = get_video_url(search)
-
-        download_video_audio(video_url)
+        yt_audio_dl(video_url)
 
         voice_client.play(discord.FFmpegPCMAudio("Temp/audio.mp3", executable="ffmpeg/ffmpeg.exe"))
 
         await send_deferred_bot_response(interaction, f"**Playing :** {video_url}")
+
+    @tree.command(name="leave", description="Déconnecte le bot.")
+    async def leave(interaction: discord.Interaction):
+
+        if interaction.client.voice_clients is not None:
+            await interaction.client.voice_clients[0].disconnect(force=True)
 
     bot.run(token)
