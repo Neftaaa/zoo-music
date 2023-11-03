@@ -44,7 +44,11 @@ def run_discord_bot():
         if validators.url(search):
             media = detect_media(search)
             if media is None:
-                await send_deferred_bot_response(interaction, f"Lien non-supporté. Les différents médias disponibles sont : `{str(get_supported_medias().keys())}`")
+                medias = ""
+                for media in get_supported_medias().keys():
+                    medias += media + ", "
+
+                await send_deferred_bot_response(interaction, f"Lien non-supporté. Les différents médias disponibles sont : `{medias.removesuffix(', ')}`.")
                 return
 
             video_url = search
@@ -75,8 +79,24 @@ def run_discord_bot():
 
     @tree.command(name="leave", description="Déconnecte le bot.")
     async def leave(interaction: discord.Interaction):
+        await interaction.response.defer()
 
         if interaction.client.voice_clients is not None:
             await interaction.client.voice_clients[0].disconnect(force=True)
+            await send_deferred_bot_response(interaction, "Déconnexion du bot...")
+
+        else:
+            await send_deferred_bot_response(interaction, "Déconnexion impossible.")
+
+    @tree.command(name="stop", description="Stop la musique et vide la queue.")
+    async def stop(interaction: discord.Interaction):
+        await interaction.response.defer()
+
+        if interaction.client.voice_clients is not None and interaction.client.voice_clients[0].is_playing():
+            interaction.client.voice_clients[0].stop()
+            await send_deferred_bot_response(interaction, "Arrêt de la musique...")
+
+        else:
+            await send_deferred_bot_response(interaction, "Aucune musique n'est jouée.")
 
     bot.run(token)
